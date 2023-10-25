@@ -1,4 +1,4 @@
-use common::types::{MotorId, Percent};
+use common::types::{MotorId, Movement, Percent};
 use std::fmt::Debug;
 use std::time::Duration;
 
@@ -26,84 +26,6 @@ const DEFAULT_SERVO: Motor = Motor {
     reverse: Duration::from_micros(1100),
     forward: Duration::from_micros(1900),
     center: Duration::from_micros(1500),
-};
-
-// ---------- Thrusters ----------
-//7
-pub const MOTOR_FLB: Motor = Motor {
-    channel: 0,
-    ..DEFAULT_MOTOR_CCW
-};
-//2
-pub const MOTOR_FLT: Motor = Motor {
-    channel: 1,
-    ..DEFAULT_MOTOR_CW
-};
-//1
-pub const MOTOR_FRB: Motor = Motor {
-    channel: 4,
-    ..DEFAULT_MOTOR_CW
-};
-//6
-pub const MOTOR_FRT: Motor = Motor {
-    channel: 5,
-    ..DEFAULT_MOTOR_CCW
-};
-//0
-pub const MOTOR_BLB: Motor = Motor {
-    channel: 7,
-    ..DEFAULT_MOTOR_CW
-};
-//4
-pub const MOTOR_BLT: Motor = Motor {
-    channel: 6,
-    ..DEFAULT_MOTOR_CCW
-};
-//5
-pub const MOTOR_BRB: Motor = Motor {
-    channel: 3,
-    ..DEFAULT_MOTOR_CCW
-};
-//3
-pub const MOTOR_BRT: Motor = Motor {
-    channel: 2,
-    ..DEFAULT_MOTOR_CW
-};
-
-// ---------- Camera Servos ----------
-pub const SERVO_CAM1: Motor = Motor {
-    channel: 15,
-    ..DEFAULT_SERVO
-};
-pub const SERVO_CAM2: Motor = Motor {
-    channel: 14,
-    ..DEFAULT_SERVO
-};
-pub const SERVO_CAM3: Motor = Motor {
-    channel: 13,
-    ..DEFAULT_SERVO
-};
-pub const SERVO_CAM4: Motor = Motor {
-    channel: 12,
-    ..DEFAULT_SERVO
-};
-
-// ---------- Auxiliary Servos ----------
-pub const SERVO_AUX1: Motor = Motor {
-    channel: 11,
-    ..DEFAULT_SERVO
-};
-pub const SERVO_AUX2: Motor = Motor {
-    channel: 10,
-    ..DEFAULT_SERVO
-};
-pub const SERVO_AUX3: Motor = Motor {
-    channel: 9,
-    ..DEFAULT_SERVO
-};
-pub const SERVO_AUX4: Motor = Motor {
-    channel: 8,
-    ..DEFAULT_SERVO
 };
 
 #[derive(Copy, Clone, PartialEq, Debug)]
@@ -141,27 +63,186 @@ impl Motor {
     }
 }
 
-impl From<MotorId> for Motor {
-    #[rustfmt::skip]
-    fn from(value: MotorId) -> Self {
-        match value {
-            MotorId::FrontLeftBottom =>   MOTOR_FLB,
-            MotorId::FrontLeftTop =>      MOTOR_FLT,
-            MotorId::FrontRightBottom =>  MOTOR_FRB,
-            MotorId::FrontRightTop =>     MOTOR_FRT,
-            MotorId::BackLeftBottom =>    MOTOR_BLB,
-            MotorId::BackLeftTop =>       MOTOR_BLT,
-            MotorId::BackRightBottom =>   MOTOR_BRB,
-            MotorId::BackRightTop =>      MOTOR_BRT,
+// TODO Fix motor math
+pub fn mix_movement<'a>(mov: Movement, motor_data: &MotorData) -> HashMap<MotorId, MotorFrame> {
+    const MAX_AMPERAGE: f64 = 20.0;
 
-            MotorId::Camera1 =>           SERVO_CAM1,
-            MotorId::Camera2 =>           SERVO_CAM2,
-            MotorId::Camera3 =>           SERVO_CAM3,
-            MotorId::Camera4 =>           SERVO_CAM4,
-            MotorId::Aux1 =>              SERVO_AUX1,
-            MotorId::Aux2 =>              SERVO_AUX2,
-            MotorId::Aux3 =>              SERVO_AUX3,
-            MotorId::Aux4 =>              SERVO_AUX4,
-        }
+    let drive_ids = [
+        MotorId::FrontLeftBottom,
+        MotorId::FrontLeftTop,
+        MotorId::FrontRightBottom,
+        MotorId::FrontRightTop,
+        MotorId::BackLeftBottom,
+        MotorId::BackLeftTop,
+        MotorId::BackRightBottom,
+        MotorId::BackRightTop,
+    ];
+    let servo_ids = [
+        MotorId::Camera1,
+        MotorId::Camera2,
+        MotorId::Camera3,
+        MotorId::Camera4,
+        MotorId::Aux1,
+        MotorId::Aux2,
+        MotorId::Aux3,
+        MotorId::Aux4,
+    ];
+
+    let Movement {
+        x,
+        y,
+        z,
+        x_rot,
+        y_rot,
+        z_rot,
+        cam_1,
+        cam_2,
+        cam_3,
+        cam_4,
+        aux_1,
+        aux_2,
+        aux_3,
+        aux_4,
+    } = mov;
+
+    let (x, y, z) = (x.get(), y.get(), z.get());
+    let (x_rot, y_rot, z_rot) = (x_rot.get(), y_rot.get(), z_rot.get());
+
+    let mut raw_mix = HashMap::default();
+
+    for motor_id in drive_ids {
+        let motor = Motor::from(motor_id);
+
+        #[rustfmt::skip]
+        let speed = match motor_id {
+            MotorId::FrontLeftBottom =>   -x - y + z + x_rot + y_rot - z_rot,
+            MotorId::FrontLeftTop =>      -x - y - z - x_rot - y_rot - z_rot,
+            MotorId::FrontRightBottom =>   x - y + z + x_rot - y_rot + z_rot,
+            MotorId::FrontRightTop =>      x - y - z - x_rot + y_rot + z_rot,
+            MotorId::BackLeftBottom =>    -x + y + z - x_rot + y_rot + z_rot,
+            MotorId::BackLeftTop =>       -x + y - z + x_rot - y_rot + z_rot,
+            MotorId::BackRightBottom =>    x + y + z - x_rot - y_rot - z_rot,
+            MotorId::BackRightTop =>       x + y - z + x_rot + y_rot - z_rot,
+
+            _ => unreachable!()
+        };
+
+        let skew = if speed >= 0.0 { 1.0 } else { 1.25 };
+        let direction = motor.max_value.get().signum();
+
+        raw_mix.insert(motor_id, speed * skew * direction);
     }
+
+    let max_raw = raw_mix.len() as f64;
+    let total_raw: f64 = raw_mix.values().map(|it| it.abs()).sum();
+    let scale_raw = if total_raw > max_raw {
+        max_raw / total_raw
+    } else {
+        // Handle cases where we dont want to go max speed
+        1.0
+    };
+
+    let motor_amperage = MAX_AMPERAGE / max_raw;
+    let mut speeds: HashMap<MotorId, MotorFrame> = raw_mix
+        .into_iter()
+        .map(|(motor, value)| (motor, value * scale_raw * motor_amperage))
+        .map(|(motor, current)| (motor, motor_data.pwm_for_current(current)))
+        .map(|(motor, pwm)| (motor, MotorFrame::Raw(pwm)))
+        .collect();
+
+    for motor in servo_ids {
+        #[rustfmt::skip]
+        let speed = match motor {
+            MotorId::Camera1 => cam_1,
+            MotorId::Camera2 => cam_2,
+            MotorId::Camera3 => cam_3,
+            MotorId::Camera4 => cam_4,
+
+            MotorId::Aux1 => aux_1,
+            MotorId::Aux2 => aux_2,
+            MotorId::Aux3 => aux_3,
+            MotorId::Aux4 => aux_4,
+
+            _ => unreachable!()
+        };
+
+        speeds.insert(motor, MotorFrame::Percent(speed));
+    }
+
+    speeds
+}
+
+pub struct MotorData {
+    forward: Vec<MotorRecord>,
+    backward: Vec<MotorRecord>,
+}
+
+impl MotorData {
+    pub fn sort(&mut self) {
+        self.forward
+            .sort_by(|a, b| f64::total_cmp(&a.current, &b.current));
+        self.backward
+            .sort_by(|a, b| f64::total_cmp(&a.current, &b.current));
+    }
+
+    pub fn pwm_for_current(&self, signed_current: f64) -> Duration {
+        let current = signed_current.abs();
+
+        let data_set = if signed_current >= 0.0 {
+            &self.forward
+        } else {
+            &self.backward
+        };
+        assert!(!data_set.is_empty());
+
+        let idx = data_set.partition_point(|x| x.current < current);
+        let pwm = if idx > 0 && idx < data_set.len() {
+            let a = &data_set[idx - 1];
+            let b = &data_set[idx];
+
+            let alpha = (current - a.current) / (b.current - a.current);
+
+            a.pwm * (1.0 - alpha) + (b.pwm * alpha)
+        } else {
+            data_set[0].pwm
+        };
+
+        Duration::from_micros(pwm as u64)
+    }
+}
+
+#[derive(Deserialize, Debug)]
+pub struct MotorRecord {
+    pwm: f64,
+    rpm: f64,
+    current: f64,
+    voltage: f64,
+    power: f64,
+    force: f64,
+    efficiency: f64,
+}
+
+pub fn read_motor_data() -> anyhow::Result<MotorData> {
+    let forward = csv::Reader::from_path("forward_motor_data.csv").context("Read forward data")?;
+    let reverse = csv::Reader::from_path("reverse_motor_data.csv").context("Read reverse data")?;
+
+    let mut forward_data = Vec::default();
+    for result in forward.into_deserialize() {
+        let record: MotorRecord = result.context("Parse motor record")?;
+        forward_data.push(record);
+    }
+
+    let mut reverse_data = Vec::default();
+    for result in reverse.into_deserialize() {
+        let record: MotorRecord = result.context("Parse motor record")?;
+        reverse_data.push(record);
+    }
+
+    let mut motor_data = MotorData {
+        forward: forward_data,
+        backward: reverse_data,
+    };
+    motor_data.sort();
+
+    Ok(motor_data)
 }
