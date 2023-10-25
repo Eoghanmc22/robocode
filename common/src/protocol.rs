@@ -1,6 +1,5 @@
 //! Repersents the protocol used for two way communication
 
-use crate::types::LogLevel;
 use anyhow::Context;
 use bincode::{DefaultOptions, Options};
 use serde::{Deserialize, Serialize};
@@ -9,16 +8,10 @@ use std::time::SystemTime;
 /// Representation of all messages that can be communicated between peers
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub enum Protocol {
-    /// Update peers data store
-    Store(String, Option<Vec<u8>>),
-    /// Requests that the peer sends the contents of its RobotState
-    RequestSync,
-    /// Logs a message on the peer's console
-    Log(LogLevel, String),
     /// Asks the peer to reply with a Pong, used to measure communication latency
-    Ping(SystemTime),
+    Ping { ping: SystemTime },
     /// Response to a Ping, used to measure communication latency
-    Pong(SystemTime, SystemTime),
+    Pong { ping: SystemTime, pong: SystemTime },
 }
 
 impl networking::Packet for Protocol {
