@@ -6,13 +6,17 @@ fmt:
   treefmt
 
 # Run 'cargo run' on the project
-drun *ARGS:
-  nix develop --command cargo run {{ARGS}}
+# drun *ARGS:
+#   nix develop --command cargo run {{ARGS}}
 
-dbuild:
-  nix develop --command cargo build
+# dbuild:
+#   nix develop --command cargo build
 
 # Run 'cargo watch' to run the project (auto-recompiles)
-watch *ARGS:
-  cargo watch -x "run -- {{ARGS}}"
+# watch *ARGS:
+#   cargo watch -x "run -- {{ARGS}}"
+
+update:
+  cargo update
+  nix run github:cargo2nix/cargo2nix
 

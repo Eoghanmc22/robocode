@@ -79,7 +79,8 @@ rand = "0.9"
 rgb = "0.8"
 ahash = "0.8"
 time = { version = "0.3", features = ["local-offset", "formatting"] }
-opencv = "0.94"
+# TODO: Why do we need this feature?
+opencv = { version = "0.94", features = ["clang-runtime"]}
 itertools = "0.14"
 tokio = { version = "1", features = ["full"] }
 crossbeam = "0.8"
