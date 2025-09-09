@@ -12,6 +12,7 @@ use common::{
 };
 use crossbeam::channel::{self, Receiver, Sender};
 use opencv::{
+    core::AlgorithmHint,
     imgproc,
     platform_types::size_t,
     prelude::*,
@@ -336,7 +337,14 @@ pub fn mat_to_image(mat: &Mat, image: &mut Image) -> anyhow::Result<()> {
     };
 
     // TODO(mid): Try to remove
-    imgproc::cvt_color(mat, &mut out_mat, imgproc::COLOR_BGR2RGBA, 4).context("Convert colors")?;
+    imgproc::cvt_color(
+        mat,
+        &mut out_mat,
+        imgproc::COLOR_BGR2RGBA,
+        4,
+        AlgorithmHint::ALGO_HINT_APPROX,
+    )
+    .context("Convert colors")?;
 
     Ok(())
 }

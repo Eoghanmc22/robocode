@@ -1,2 +1,0 @@
-# Needed for clang-sys to compile on gentoo
-export LIBCLANG_PATH=/usr/lib/llvm/18/lib64/
