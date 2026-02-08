@@ -1,4 +1,4 @@
-# `mate-rov-2025`
+# `robocode`
 
 This project is a custom software stack to control ROVs based on a Raspberry Pi 4/5.
 This project It is based on the bevy game engine and is intended to be used in the MATE ROV Competition.
@@ -18,37 +18,39 @@ The software current only has support for the following hardware
 - Neopixel Light Strips
   - The RGB kind
 - Any H.264 webcam
+- [Our custom 4 channel DC motor controller](https://github.com/Eoghanmc22/dc-motor)
 
 Hardware support may be expanded in the future, but this is not currently a priority.
 
 ## Surface Hardware Support
 
-This code has only been tested on a Framework 13in Laptop 12th gen running Gentoo and using the Wayland compositor Hyprland (must drive ROV with style).
-Most other configurations should work provided the correct gstreamer plugins and system libraries are available.
+The recommended way to use the surface application is with the nix flake.
+Assuming the nix package manager is installed on your system, you can run the
+surface component with `nix run`, however compiling may take a long time.
 
-See [Bevy Linux Deps](https://github.com/bevyengine/bevy/blob/main/docs/linux_dependencies.md)\
-See [opencv-rust Deps](https://github.com/twistedfall/opencv-rust)\
-TODO: Document gstreamer deps
+Getting it to run outside of nix may be challenging, If you choose to do this,
+at a minimum the following will need to be installed on your system:
+
+- See [Bevy Linux Deps](https://github.com/bevyengine/bevy/blob/main/docs/linux_dependencies.md)
+- See [opencv-rust Deps](https://github.com/twistedfall/opencv-rust)
+- TODO: Document gstreamer deps
 
 ## Motor configurations
 
-Unlike most other control systems, we support arbitrary thruster configurations provided the following data is available.
+We support control of arbitrary thruster configurations provided the following data is available.
 
 - Thruster Performance curves
   - Needs a mapping between PWM, thrust, and amperage draw.
-  - This is available for Blue Robotics T200 thrusters.
-  - This requirement may be removed in the future
+  - This is already included for Blue Robotics T200 thrusters.
 - Thruster Position Information
   - Orientation as a vector
   - Position relative to the robot's origin as a vector
 
-Our motor code is dynamic, simple, correct, and fast (just one matrix multiplication).
-Thruster data can be modified in real time if needed, and when a single solution is not possible, the best (least squares) solution is used. Also, it's differentiable.
 See the `motor_code` crate for more.
 
 ## Project Structure
 
-This code base is broken up into the following crates
+This codebase is broken up into the following crates
 
 - `robot`
   - This is the binary running on the Raspberry Pi
@@ -62,11 +64,11 @@ This code base is broken up into the following crates
   - This library defines the communication between `robot` and `surface`
   - ECS sync, ECS bundles and components, most type definitions, networking protocol
 - `motor_code`
-  - This library implements our secret sauce motor math code
+  - This library implements our motor math code
   - The responsible for mapping movement commands to thruster commands
 - `networking`
   - This library implements a fast non-blocking TCP server and client
-  - Handles low level protocol details
+  - Handles low level networking protocol details
 
 ## System Ordering
 
@@ -88,17 +90,22 @@ This code base is broken up into the following crates
 
 ### Background
 
-Fundamental premise: Bevy ECS is perfect
-
-In our previous codebase (Eoghanmc22/mate-rov-2023) the surface and robot implementation were fundamentally different.
+In this iteration of my software stack, I decided to leverage the bevy game
+engine on both the surface and the robot. This choice was made so to keep the
+architecture of both halfs more consistent. In our previous codebase
+(Eoghanmc22/mate-rov-2023) the surface and robot implementation used
+fundamentally different architectures, and this created the possibility desync
+and consistency problems due to both sides making slightly different
+assumptions and storing data in different ways. Some of the differences I
+wanted to eliminate from the 2023 code base include:
 
 - Different core data structure (ECS vs Type erased hash map)
 - Different programming paradigms (Data driven vs Event based message passing)
 - Different concurrency models (Concurrent game loop vs Every subsystem gets its own thread)
 - Probably other things
 
-This worked but made communication and state harder to maintain and uglier.
-It also lead to strange limitations such as the opencv thread not having access to the robot's state.
+While the old codebase was functional, it was difficult to maintain and had several limitations.
+For example, the opencv thread in the 2023 code did not have access to the robot's state.
 Also, we couldn't do goofy things like drive two ROVs at the same time because both ROVs would try to use the same keys in the "distributed" hash map.
 Armed with the perfect excuse to rewrite everything, I settled on the idea of a distributed ECS.
 This would allow communication between `surface` and `robot` to transparent as synchronization would simply be implemented upon the same infrastructure already used to store local state.
@@ -107,14 +114,15 @@ This allows for a consistent code style between `robot` and `surface` and a gene
 
 ### Design
 
-A list of component types implement serde's Serialize and Deserialize traits and entities with any of these components will be replicated on all peers
-We take advantage of bevy's change detection system and send a packet to all peers when a component with a known type is mutated.
-This will update the peer's replicated entity to match the updated value for the component.
-
-TODO: Explain how it works after I rewrite it
+Each component types implements serde's Serialize and Deserialize traits.
+Entities with any of these components will be replicated on all peers if they
+are tagged with the Replicate component. We take advantage of bevy's change
+detection system and send a packet to all peers when a component with a known
+type is mutated. This will update the peer's replicated entity to match the
+updated value for the component.
 
 ## Thanks
 
-Thanks to all the people who made the libraries and tools I used in ways they could have never imagined.
+Thanks to all the people who made the libraries and tools I used in ways they (probably) never could have imagined.
 
 Made with :heart: in :crab: :rocket: 
