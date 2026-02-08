@@ -136,7 +136,7 @@
               (craneLib.fileset.commonCargoSources ./networking)
               (craneLib.fileset.commonCargoSources ./stable_hashmap)
 
-              # TODO: Binarie crates absolutely should not be here
+              # TODO: Binary crates absolutely should not be here
               (craneLib.fileset.commonCargoSources ./robot)
               (craneLib.fileset.commonCargoSources ./surface)
               (craneLib.fileset.commonCargoSources ./waterlinked)
@@ -160,6 +160,14 @@
             src = fileSetForCrate ./surface;
           }
         );
+        robot = craneLib.buildPackage (
+          individualCrateArgs
+          // {
+            pname = "robot";
+            # cargoExtraArgs = "-p my-cli";
+            src = fileSetForCrate ./robot;
+          }
+        );
         # my-server = craneLib.buildPackage (
         #   individualCrateArgs
         #   // {
@@ -172,7 +180,7 @@
       {
         checks = {
           # Build the crates as part of `nix flake check` for convenience
-          inherit surface;
+          inherit surface robot;
 
           # Run clippy (and deny all warnings) on the workspace source,
           # again, reusing the dependency artifacts from above.
@@ -234,14 +242,7 @@
         };
 
         packages = {
-          inherit surface;
-        };
-
-        apps = {
-          # Building this seems to also build robot and everyting else
-          surface = flake-utils.lib.mkApp {
-            drv = surface;
-          };
+          inherit surface robot;
         };
 
         devShells.default = craneLib.devShell {
@@ -249,11 +250,12 @@
           checks = self.checks.${system};
 
           # Additional dev-shell environment variables can be set directly
-          # MY_CUSTOM_DEVELOPMENT_VAR = "something else";
+          LD_LIBRARY_PATH = lib.makeLibraryPath depsSurface;
 
           # Extra inputs can be added here; cargo and rustc are provided by default.
           packages = [
-            # TODO: 
+            surface
+            robot
           ] ++ depsSurface;
         };
       }

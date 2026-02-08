@@ -26,7 +26,7 @@ Hardware support may be expanded in the future, but this is not currently a prio
 
 The recommended way to use the surface application is with the nix flake.
 Assuming the nix package manager is installed on your system, you can run the
-surface component with `nix run`, however compiling may take a long time.
+software component by running `nix develop` and then executing `surface` or `robot` in that shell.
 
 Getting it to run outside of nix may be challenging, If you choose to do this,
 at a minimum the following will need to be installed on your system:
